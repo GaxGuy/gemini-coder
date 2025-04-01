@@ -715,7 +715,7 @@
     "@types/react": "^18.2.60",
     "@types/react-dom": "^18.2.19",
     "@types/vscode": "^1.92.0",
-    "@types/ws": "^8.5.14",
+    "@types/ws": "^8.18.1",
     "babel-loader": "^9.1.3",
     "clean-webpack-plugin": "^4.0.0",
     "copy-webpack-plugin": "^12.0.2",
@@ -743,6 +743,6 @@
     "react-dom": "^18.2.0",
     "ui": "workspace:*",
     "utf-8-validate": "^6.0.5",
-    "ws": "^8.18.0"
+    "ws": "^8.18.1"
   }
 }
