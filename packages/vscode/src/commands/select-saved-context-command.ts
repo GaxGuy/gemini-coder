@@ -34,13 +34,11 @@ async function apply_saved_context(
     return
   }
 
-  // Apply checked state to files
   await workspace_provider.set_checked_files(existing_paths)
-
   vscode.window.showInformationMessage(`Applied context "${context.name}".`)
 }
 
-async function saveConfig(
+async function save_config(
   config_path: string,
   config: GeminiCoderConfig
 ): Promise<void> {
@@ -56,7 +54,8 @@ async function saveConfig(
 }
 
 export function select_saved_context_command(
-  workspace_provider: WorkspaceProvider | undefined
+  workspace_provider: WorkspaceProvider | undefined,
+  on_context_selected: () => void
 ): vscode.Disposable {
   return vscode.commands.registerCommand(
     'geminiCoder.selectSavedContext',
@@ -145,7 +144,7 @@ export function select_saved_context_command(
                 config.savedContexts = config.savedContexts.filter(
                   (c) => c.name != item.context.name
                 )
-                await saveConfig(config_path, config)
+                await save_config(config_path, config)
                 vscode.window.showInformationMessage(
                   `Deleted context "${item.context.name}"`
                 )
@@ -167,18 +166,15 @@ export function select_saved_context_command(
         })
 
         quick_pick.show()
-
-        // Wait for the user to select an item or cancel
         const selected = await quick_pick_promise
-
         if (!selected) return
 
-        // Apply the selected context
         await apply_saved_context(
           selected.context,
           workspace_root,
           workspace_provider
         )
+        on_context_selected()
       } catch (error: any) {
         vscode.window.showErrorMessage(
           `Error reading saved contexts: ${error.message}`

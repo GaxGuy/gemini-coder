@@ -18,9 +18,9 @@ User requested refactor of a file. In your response send fully updated <file> on
 [CODE BLOCK CONTENT]
 ```
 
-Full responses targeting multiple files to be parsed correctly, code blocks must contain filenames in expected places. "name" attribute format is requested by the default system instructions the extension automatically places when using AI Studio. The other format is commonly used by some other supported chatbots.
+Full responses targeting multiple files to be parsed correctly, code blocks must contain filenames in expected places. When initializing AI Studio through the Connector web browser extension we ask it to use "name" attribute in system instructions. The same format is supported by default in Github Copilot. The other format "first line comment" is commonly used by other supported chatbots not supporting system instructions like DeepSeek.
 
-<Tabs groupId="apply-changes-format">
+<Tabs groupId="apply-changes-1">
   <TabItem value="format" label='"name" attribute'>
 
 ````markdown
@@ -49,12 +49,11 @@ Code content for the file goes here...
   </TabItem>
 </Tabs>
 
-
 ## How it Works
 
 You copied...
 
-<Tabs groupId="apply-changes-format">
+<Tabs groupId="apply-changes-2">
   <TabItem value="format" label='whole response'>
 
      - Text surrounding code blocks are discarded.

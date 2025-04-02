@@ -11,6 +11,7 @@ import {
 import { SharedFileState } from './shared-file-state'
 import { marked } from 'marked'
 import { EventEmitter } from 'events'
+import { select_saved_context_command } from '../commands/select-saved-context-command'
 
 export const token_count_emitter = new EventEmitter()
 
@@ -259,7 +260,10 @@ export function context_initialization(context: vscode.ExtensionContext): {
             </html>
           `
       }
-    )
+    ),
+    select_saved_context_command(workspace_provider, () => {
+      update_activity_bar_badge_token_count()
+    })
   )
 
   // Handle checkbox state changes asynchronously for file tree
@@ -268,8 +272,7 @@ export function context_initialization(context: vscode.ExtensionContext): {
       await workspace_provider!.update_check_state(item, state)
     }
 
-    // Update token count after checkbox changes
-    await update_activity_bar_badge_token_count()
+    update_activity_bar_badge_token_count()
   })
 
   // Handle checkbox state changes asynchronously for open editors
@@ -278,8 +281,7 @@ export function context_initialization(context: vscode.ExtensionContext): {
       await open_editors_provider!.update_check_state(item, state)
     }
 
-    // Update token count after checkbox changes
-    await update_activity_bar_badge_token_count()
+    update_activity_bar_badge_token_count()
   })
 
   // Subscribe to the onDidChangeCheckedFiles events from both providers

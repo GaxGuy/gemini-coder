@@ -162,7 +162,7 @@ export function save_context_command(
       const checked_files = workspace_provider.get_checked_files()
       if (checked_files.length == 0) {
         vscode.window.showWarningMessage(
-          'No files are checked in the workspace view. Nothing to save.'
+          'There is nothing to save.'
         )
         return
       }

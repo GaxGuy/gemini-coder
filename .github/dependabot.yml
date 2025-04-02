@@ -1,12 +1,29 @@
 # Dependabot configuration file for PNPM workspace
 version: 2
 updates:
-  # Check for updates to npm dependencies in each package in the workspace
+  # Check for updates to npm dependencies in the vscode package
   - package-ecosystem: 'npm'
-    directory: '/packages/*'
+    directory: '/packages/vscode'
     schedule:
-      interval: 'weekly'
-    # Group all dependencies in each package into a single PR
+      interval: 'monthly'
+    # Add this to prevent major version updates
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+    groups:
+      workspace-dependencies:
+        patterns:
+          - '*'
+
+  # Check for updates to npm dependencies in the browser package
+  - package-ecosystem: 'npm'
+    directory: '/packages/browser'
+    schedule:
+      interval: 'monthly'
+    # Add this to prevent major version updates
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
     groups:
       workspace-dependencies:
         patterns:
