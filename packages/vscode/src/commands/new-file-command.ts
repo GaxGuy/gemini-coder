@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 import * as path from 'path'
+import { create_safe_path } from '../utils/path-sanitizer'
 
 export function new_file_command() {
   return vscode.commands.registerCommand(
@@ -24,17 +25,29 @@ export function new_file_command() {
       }
 
       try {
-        // Create full file path
-        const file_path = path.join(parent_path, file_name)
+        // Create safe file path with sanitization
+        const file_path = create_safe_path(parent_path, file_name)
+
+        // If path sanitization failed, abort
+        if (!file_path) {
+          vscode.window.showErrorMessage(`Invalid file name: '${file_name}'`)
+          return
+        }
 
         // Check if file already exists
         try {
           await vscode.workspace.fs.stat(vscode.Uri.file(file_path))
-          vscode.window.showErrorMessage(`File '${file_name}' already exists.`)
+          vscode.window.showErrorMessage(
+            `File '${path.basename(file_path)}' already exists.`
+          )
           return
         } catch {
           // File doesn't exist, which is what we want
         }
+
+        // Ensure parent directories exist
+        const directory = path.dirname(file_path)
+        await vscode.workspace.fs.createDirectory(vscode.Uri.file(directory))
 
         // Create the file with empty content
         await vscode.workspace.fs.writeFile(

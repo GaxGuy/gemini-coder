@@ -1,4 +1,5 @@
 const path = require('path')
+const crypto = require('crypto') // Import crypto module
 const CopyWebpackPlugin = require('copy-webpack-plugin')
 const { CleanWebpackPlugin } = require('clean-webpack-plugin')
 const MiniCssExtractPlugin = require('mini-css-extract-plugin')
@@ -48,15 +49,21 @@ function create_webview_config(name, entry_path) {
               loader: 'css-loader',
               options: {
                 modules: {
-                  getLocalIdent: (context, localIdentName, localName) => {
+                  getLocalIdent: (context, _, localName) => {
                     const filename = context.resourcePath
                     const isModule = /\.module\.(scss|css)$/i.test(filename)
                     if (isModule) {
                       const moduleName = path
                         .basename(filename)
                         .replace(/\.module\.(scss|css)$/i, '')
-                      return `${moduleName}__${localName}`
+                      const hash = crypto
+                        .createHash('md5')
+                        .update(`${filename}${localName}`)
+                        .digest('hex')
+                        .substring(0, 5)
+                      return `${moduleName}__${localName}__${hash}`
                     }
+                    // Return original name for non-module files
                     return localName
                   }
                 },

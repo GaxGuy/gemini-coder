@@ -2,7 +2,7 @@
   "name": "gemini-coder",
   "displayName": "Gemini Coder - the free 2M context AI coding assistant",
   "description": "Copy folders and files for chatbots or initialize them hands-free! Use the free Gemini API for FIM completions, file refactoring and applying AI-suggested changes.",
-  "version": "1.0.307",
+  "version": "1.0.312",
   "scripts": {
     "build": "npx vsce package --no-dependencies",
     "vscode:prepublish": "npm run compile",
@@ -287,6 +287,11 @@
       {
         "command": "geminiCoder.applyChangesIntelligentUpdate",
         "title": "Apply Changes (Intelligent update)",
+        "category": "Gemini Coder"
+      },
+      {
+        "command": "geminiCoder.revert",
+        "title": "Revert Last Applied Changes",
         "category": "Gemini Coder"
       }
     ],

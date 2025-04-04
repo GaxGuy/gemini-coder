@@ -1,6 +1,7 @@
 export interface ClipboardFile {
   file_path: string
   content: string
+  workspace_name?: string
 }
 
 const extract_filename_from_comment = (line: string): string | null => {
@@ -17,6 +18,31 @@ const extract_filename_from_comment = (line: string): string | null => {
   return null
 }
 
+// Helper function to check if path starts with a workspace name and extract it
+const extract_workspace_and_path = (
+  file_path: string
+): { workspace_name?: string; relative_path: string } => {
+  // Check if the path might contain a workspace prefix (contains a slash)
+  if (!file_path.includes('/')) {
+    return { relative_path: file_path }
+  }
+
+  // Split by first slash to check for workspace prefix
+  const first_slash_index = file_path.indexOf('/')
+  if (first_slash_index > 0) {
+    const possible_workspace = file_path.substring(0, first_slash_index)
+    const rest_of_path = file_path.substring(first_slash_index + 1)
+
+    // Return both the possible workspace name and the rest of the path
+    return {
+      workspace_name: possible_workspace,
+      relative_path: rest_of_path
+    }
+  }
+
+  return { relative_path: file_path }
+}
+
 export const parse_clipboard_multiple_files = (
   clipboard_text: string
 ): ClipboardFile[] => {
@@ -28,6 +54,7 @@ export const parse_clipboard_multiple_files = (
   let current_content = ''
   let block_start_index = -1
   let is_first_content_line = false
+  let current_workspace_name: string | undefined = undefined
 
   // Split text into lines for easier processing
   const lines = clipboard_text.split('\n')
@@ -39,6 +66,7 @@ export const parse_clipboard_multiple_files = (
     if (state == 'TEXT' && line.trim().startsWith('```')) {
       state = 'BLOCK_START'
       block_start_index = i
+      current_workspace_name = undefined // Reset workspace name for new block
 
       // Check if this line also contains the filename
       const name_match = line.match(/name=(?:"([^"]+)"|([^\s"]+))/)
@@ -46,6 +74,15 @@ export const parse_clipboard_multiple_files = (
         // If quoted version was matched, use the first capture group
         // Otherwise use the second capture group
         current_file_name = (name_match[1] || name_match[2]).trim()
+
+        // Check if file path starts with a workspace name
+        const { workspace_name, relative_path } =
+          extract_workspace_and_path(current_file_name)
+        if (workspace_name) {
+          current_workspace_name = workspace_name
+          current_file_name = relative_path // Store just the relative path
+        }
+
         state = 'CONTENT' // Skip filename state
         current_content = '' // Start with empty content
         is_first_content_line = true
@@ -59,6 +96,15 @@ export const parse_clipboard_multiple_files = (
         // If quoted version was matched, use the first capture group
         // Otherwise use the second capture group
         current_file_name = (name_match[1] || name_match[2]).trim()
+
+        // Check if file path starts with a workspace name
+        const { workspace_name, relative_path } =
+          extract_workspace_and_path(current_file_name)
+        if (workspace_name) {
+          current_workspace_name = workspace_name
+          current_file_name = relative_path // Store just the relative path
+        }
+
         state = 'CONTENT'
         current_content = '' // Start with empty content
         is_first_content_line = true
@@ -78,7 +124,8 @@ export const parse_clipboard_multiple_files = (
         if (current_file_name) {
           files.push({
             file_path: current_file_name,
-            content: current_content
+            content: current_content,
+            workspace_name: current_workspace_name // Store workspace name if available
           })
         }
 
@@ -87,6 +134,7 @@ export const parse_clipboard_multiple_files = (
         current_content = ''
         block_start_index = -1
         is_first_content_line = false
+        current_workspace_name = undefined
       } else {
         // Check if we're on the first content line and it might contain a filename in a comment
         if (is_first_content_line && !current_file_name) {
@@ -94,7 +142,14 @@ export const parse_clipboard_multiple_files = (
           if (line.trim().startsWith('//') || line.trim().startsWith('#')) {
             const extracted_filename = extract_filename_from_comment(line)
             if (extracted_filename) {
-              current_file_name = extracted_filename
+              // Check if extracted filename contains workspace prefix
+              const { workspace_name, relative_path } =
+                extract_workspace_and_path(extracted_filename)
+              current_file_name = relative_path
+              if (workspace_name) {
+                current_workspace_name = workspace_name
+              }
+
               // Don't include the comment line in the content
               is_first_content_line = false
               continue
@@ -122,7 +177,8 @@ export const parse_clipboard_multiple_files = (
     // Add what we've collected so far
     files.push({
       file_path: current_file_name,
-      content: current_content
+      content: current_content,
+      workspace_name: current_workspace_name
     })
   }
 

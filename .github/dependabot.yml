@@ -6,10 +6,12 @@ updates:
     directory: '/packages/vscode'
     schedule:
       interval: 'monthly'
-    # Add this to prevent major version updates
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      # Build won't pass when version of @types/vscode does not match engines.vscode
+      - dependency-name: '@types/vscode'
+        versions: ['*']
     groups:
       workspace-dependencies:
         patterns:
@@ -20,7 +22,6 @@ updates:
     directory: '/packages/browser'
     schedule:
       interval: 'monthly'
-    # Add this to prevent major version updates
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']

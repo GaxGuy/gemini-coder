@@ -14,12 +14,17 @@ import {
   parse_clipboard_multiple_files,
   is_multiple_files_clipboard
 } from './clipboard-parser'
+import { LAST_APPLIED_CHANGES_STATE_KEY } from '../../constants/state-keys'
+import {
+  sanitize_file_name,
+  create_safe_path
+} from '../../utils/path-sanitizer'
 
-// Interface to store original file state for reversion
-interface OriginalFileState {
+type OriginalFileState = {
   file_path: string
   content: string
   is_new: boolean
+  workspace_name?: string
 }
 
 async function get_selected_provider(
@@ -224,23 +229,31 @@ async function create_file_if_needed(
   }
 
   const workspace_folder = vscode.workspace.workspaceFolders![0].uri.fsPath
-  const full_path = path.join(workspace_folder, filePath)
+
+  const safe_path = create_safe_path(workspace_folder, filePath)
+
+  if (!safe_path) {
+    vscode.window.showErrorMessage(
+      `Invalid file path: ${filePath}. Path may contain traversal attempts.`
+    )
+    return false
+  }
 
   // Ensure directory exists
-  const directory = path.dirname(full_path)
+  const directory = path.dirname(safe_path)
   if (!fs.existsSync(directory)) {
     fs.mkdirSync(directory, { recursive: true })
   }
 
   // Create the file
-  fs.writeFileSync(full_path, content)
+  fs.writeFileSync(safe_path, content)
 
   // Open the file in editor
-  const document = await vscode.workspace.openTextDocument(full_path)
+  const document = await vscode.workspace.openTextDocument(safe_path)
   await vscode.window.showTextDocument(document)
 
-  // Format the new file
   await format_document(document)
+  await document.save()
 
   return true
 }
@@ -252,43 +265,79 @@ async function replace_files_directly(
   files: ClipboardFile[]
 ): Promise<{ success: boolean; original_states?: OriginalFileState[] }> {
   try {
-    // First, check if any file doesn't exist and needs to be created
     const new_files: ClipboardFile[] = []
     const existing_files: ClipboardFile[] = []
+    const safe_files: ClipboardFile[] = []
+    const unsafe_files: string[] = []
 
+    if (vscode.workspace.workspaceFolders?.length == 0) {
+      vscode.window.showErrorMessage('No workspace folder open.')
+      return { success: false }
+    }
+
+    // Create a map of workspace names to their root paths
+    const workspace_map = new Map<string, string>()
+    vscode.workspace.workspaceFolders!.forEach((folder) => {
+      workspace_map.set(folder.name, folder.uri.fsPath)
+    })
+
+    // Default workspace is the first one
+    const default_workspace = vscode.workspace.workspaceFolders![0].uri.fsPath
+
+    // First validate all file paths
     for (const file of files) {
-      // Check if file exists in workspace
-      const file_exists = await vscode.workspace
-        .findFiles(file.file_path, null, 1)
-        .then((files) => files.length > 0)
+      // Determine the correct workspace root
+      let workspace_root = default_workspace
+      if (file.workspace_name) {
+        workspace_root =
+          workspace_map.get(file.workspace_name) || default_workspace
+      }
 
-      if (file_exists) {
+      const sanitized_path = sanitize_file_name(file.file_path)
+
+      // Check if the path would be safe
+      if (create_safe_path(workspace_root, sanitized_path)) {
+        safe_files.push({
+          ...file,
+          file_path: sanitized_path // Use sanitized path
+        })
+      } else {
+        unsafe_files.push(file.file_path)
+      }
+    }
+
+    // Rest of safety checks and user warnings...
+    if (unsafe_files.length > 0) {
+      const unsafe_list = unsafe_files.join('\n')
+      vscode.window.showErrorMessage(
+        `Detected ${unsafe_files.length} unsafe file path(s) that may attempt directory traversal:\n${unsafe_list}\n\nThese files will be skipped.`
+      )
+
+      if (safe_files.length === 0) {
+        return { success: false }
+      }
+    }
+
+    // Check existence for each file in its correct workspace
+    for (const file of safe_files) {
+      // Get the correct workspace root for this file
+      let workspace_root = default_workspace
+      if (file.workspace_name) {
+        workspace_root =
+          workspace_map.get(file.workspace_name) || default_workspace
+      }
+
+      // Create full path using the correct workspace root
+      const full_path = path.join(workspace_root, file.file_path)
+
+      if (fs.existsSync(full_path)) {
         existing_files.push(file)
       } else {
         new_files.push(file)
       }
     }
 
-    // If there are new files, ask for confirmation before proceeding
-    if (new_files.length > 0) {
-      const new_file_list = new_files.map((file) => file.file_path).join('\n')
-      const confirmation = await vscode.window.showWarningMessage(
-        `This will create ${new_files.length} new ${
-          new_files.length == 1 ? 'file' : 'files'
-        }:\n${new_file_list}\n\nDo you want to continue?`,
-        { modal: true },
-        'Yes'
-      )
-
-      if (confirmation != 'Yes') {
-        vscode.window.showInformationMessage(
-          'Operation cancelled. No files were modified.'
-        )
-        return { success: false }
-      }
-    }
-
-    // Store original file states for potential reversion
+    // Store original file states for reversion
     const original_states: OriginalFileState[] = []
 
     // Apply changes to all files
@@ -300,34 +349,40 @@ async function replace_files_directly(
       },
       async (progress, token) => {
         let processed_count = 0
-        const total_count = files.length
+        const total_count = safe_files.length
 
-        for (const file of files) {
+        for (const file of safe_files) {
           if (token.isCancellationRequested) {
             vscode.window.showInformationMessage('Operation cancelled by user.')
             return false
           }
 
-          // Check if file exists in workspace
-          const file_exists = await vscode.workspace
-            .findFiles(file.file_path, null, 1)
-            .then((files) => files.length > 0)
+          // Get the correct workspace root for this file
+          let workspace_root = default_workspace
+          if (file.workspace_name) {
+            workspace_root =
+              workspace_map.get(file.workspace_name) || default_workspace
+          }
+
+          // Create safe path using the correct workspace root
+          const safe_path = create_safe_path(workspace_root, file.file_path)
+
+          if (!safe_path) {
+            console.error(`Path validation failed for: ${file.file_path}`)
+            continue
+          }
+
+          const file_exists = fs.existsSync(safe_path)
 
           if (file_exists) {
             // Store original content for reversion
-            const file_uri = vscode.Uri.file(
-              path.join(
-                vscode.workspace.workspaceFolders![0].uri.fsPath,
-                file.file_path
-              )
-            )
+            const file_uri = vscode.Uri.file(safe_path)
             const document = await vscode.workspace.openTextDocument(file_uri)
-            const original_content = document.getText()
-
             original_states.push({
               file_path: file.file_path,
-              content: original_content,
-              is_new: false
+              content: document.getText(),
+              is_new: false,
+              workspace_name: file.workspace_name
             })
 
             // Replace existing file
@@ -342,20 +397,32 @@ async function replace_files_directly(
               )
             })
 
-            // Format the document
             await format_document(document)
-
             await document.save()
           } else {
             // Mark as new file for reversion
             original_states.push({
               file_path: file.file_path,
               content: '',
-              is_new: true
+              is_new: true,
+              workspace_name: file.workspace_name
             })
 
-            // Create new file
-            await create_file_if_needed(file.file_path, file.content)
+            // Create new file in correct workspace
+            // Ensure directory exists
+            const directory = path.dirname(safe_path)
+            if (!fs.existsSync(directory)) {
+              fs.mkdirSync(directory, { recursive: true })
+            }
+
+            // Create the file
+            fs.writeFileSync(safe_path, file.content)
+
+            // Open and format the file
+            const document = await vscode.workspace.openTextDocument(safe_path)
+            await vscode.window.showTextDocument(document)
+            await format_document(document)
+            await document.save()
           }
 
           processed_count++
@@ -385,50 +452,66 @@ async function replace_files_directly(
   }
 }
 
-/**
- * Revert files to their original state
- */
 async function revert_files(
   original_states: OriginalFileState[]
 ): Promise<boolean> {
+  console.log(original_states)
   try {
+    if (vscode.workspace.workspaceFolders?.length == 0) {
+      vscode.window.showErrorMessage('No workspace folder open.')
+      return false
+    }
+
+    // Create a map of workspace names to their root paths
+    const workspace_map = new Map<string, string>()
+    vscode.workspace.workspaceFolders!.forEach((folder) => {
+      workspace_map.set(folder.name, folder.uri.fsPath)
+    })
+
+    // Default workspace is the first one
+    const default_workspace = vscode.workspace.workspaceFolders![0].uri.fsPath
+
     for (const state of original_states) {
+      // Determine the correct workspace root for this file
+      let workspace_root = default_workspace
+      if (state.workspace_name) {
+        workspace_root =
+          workspace_map.get(state.workspace_name) || default_workspace
+      }
+
+      // Validate the file path for reversion
+      const safe_path = create_safe_path(workspace_root, state.file_path)
+
+      if (!safe_path) {
+        console.error(`Cannot revert file with unsafe path: ${state.file_path}`)
+        continue
+      }
+
       // For new files that were created, delete them
       if (state.is_new) {
-        if (vscode.workspace.workspaceFolders) {
-          const file_path = path.join(
-            vscode.workspace.workspaceFolders[0].uri.fsPath,
-            state.file_path
+        if (fs.existsSync(safe_path)) {
+          // Close any editors with the file open
+          const uri = vscode.Uri.file(safe_path)
+          // Try to close the editor if it's open
+          const text_editors = vscode.window.visibleTextEditors.filter(
+            (editor) => editor.document.uri.toString() == uri.toString()
           )
-          if (fs.existsSync(file_path)) {
-            // Close any editors with the file open
-            const uri = vscode.Uri.file(file_path)
-            // Try to close the editor if it's open
-            const text_editors = vscode.window.visibleTextEditors.filter(
-              (editor) => editor.document.uri.toString() == uri.toString()
+          for (const editor of text_editors) {
+            await vscode.window.showTextDocument(editor.document, {
+              preview: false,
+              preserveFocus: false
+            })
+            await vscode.commands.executeCommand(
+              'workbench.action.closeActiveEditor'
             )
-            for (const editor of text_editors) {
-              await vscode.window.showTextDocument(editor.document, {
-                preview: false,
-                preserveFocus: false
-              })
-              await vscode.commands.executeCommand(
-                'workbench.action.closeActiveEditor'
-              )
-            }
-
-            // Delete the file
-            fs.unlinkSync(file_path)
           }
+
+          // Delete the file
+          fs.unlinkSync(safe_path)
         }
       } else {
         // For existing files that were modified, restore original content
-        const file_uri = vscode.Uri.file(
-          path.join(
-            vscode.workspace.workspaceFolders![0].uri.fsPath,
-            state.file_path
-          )
-        )
+        const file_uri = vscode.Uri.file(safe_path)
 
         try {
           const document = await vscode.workspace.openTextDocument(file_uri)
@@ -445,7 +528,6 @@ async function revert_files(
           await document.save()
         } catch (err) {
           console.error(`Error reverting file ${state.file_path}:`, err)
-          // Optionally, notify the user about the specific file error
           vscode.window.showWarningMessage(
             `Could not revert file: ${state.file_path}. It might have been closed or deleted.`
           )
@@ -628,6 +710,10 @@ export function apply_changes_command(params: {
 
           if (response == 'Revert') {
             await revert_files(result.original_states)
+            params.context.workspaceState.update(
+              LAST_APPLIED_CHANGES_STATE_KEY,
+              null
+            )
           }
         }
         return // Exit after fast replace
@@ -647,7 +733,39 @@ export function apply_changes_command(params: {
 
     if (is_multiple_files) {
       // Handle multiple files with AI processing ('Intelligent update' mode)
-      const files = parse_clipboard_multiple_files(clipboard_text)
+      const raw_files = parse_clipboard_multiple_files(clipboard_text)
+
+      // Sanitize file paths in the parsed files
+      const workspace_folder = vscode.workspace.workspaceFolders![0].uri.fsPath
+      const files: ClipboardFile[] = []
+      const skipped_files: string[] = []
+
+      for (const file of raw_files) {
+        // Sanitize and validate the file path
+        const sanitized_path = sanitize_file_name(file.file_path)
+
+        // Check if the path would be safe
+        if (create_safe_path(workspace_folder, sanitized_path)) {
+          files.push({
+            ...file,
+            file_path: sanitized_path // Use sanitized path
+          })
+        } else {
+          skipped_files.push(file.file_path)
+        }
+      }
+
+      // Show warning if unsafe paths were detected
+      if (skipped_files.length > 0) {
+        const skipped_list = skipped_files.join('\n')
+        vscode.window.showErrorMessage(
+          `Detected ${skipped_files.length} unsafe file path(s) that may attempt directory traversal:\n${skipped_list}\n\nThese files will be skipped.`
+        )
+
+        if (files.length === 0) {
+          return
+        }
+      }
 
       if (files.length == 0) {
         vscode.window.showErrorMessage(
@@ -664,9 +782,28 @@ export function apply_changes_command(params: {
 
       for (const file of files) {
         // Check if file exists in workspace
-        const file_exists = await vscode.workspace
-          .findFiles(file.file_path, null, 1)
-          .then((files) => files.length > 0)
+        let file_exists = false
+
+        if (file.workspace_name) {
+          // If we have workspace info, find the matching workspace and check in that specific workspace
+          const matching_workspace = vscode.workspace.workspaceFolders?.find(
+            (folder) => folder.name == file.workspace_name
+          )
+
+          if (matching_workspace) {
+            // Create a full path with the proper workspace root
+            const full_path = path.join(
+              matching_workspace.uri.fsPath,
+              file.file_path
+            )
+            file_exists = fs.existsSync(full_path)
+          }
+        } else {
+          // Fall back to checking across all workspaces if no workspace name is specified
+          file_exists = await vscode.workspace
+            .findFiles(file.file_path, null, 1)
+            .then((files) => files.length > 0)
+        }
 
         if (file_exists) {
           existing_files.push(file)
@@ -755,12 +892,20 @@ export function apply_changes_command(params: {
               // Find largest existing file to track
               for (const file of existing_files) {
                 try {
-                  const file_uri = vscode.Uri.file(
-                    path.join(
-                      vscode.workspace.workspaceFolders![0].uri.fsPath,
-                      file.file_path
-                    )
+                  // Create safe path for file operations
+                  const safe_path = create_safe_path(
+                    workspace_folder,
+                    file.file_path
                   )
+
+                  if (!safe_path) {
+                    console.error(
+                      `Path validation failed for: ${file.file_path}`
+                    )
+                    continue
+                  }
+
+                  const file_uri = vscode.Uri.file(safe_path)
                   const document = await vscode.workspace.openTextDocument(
                     file_uri
                   )
@@ -769,7 +914,8 @@ export function apply_changes_command(params: {
                   original_states.push({
                     file_path: file.file_path,
                     content: document.getText(),
-                    is_new: false
+                    is_new: false,
+                    workspace_name: file.workspace_name
                   })
 
                   const content_size = document.getText().length
@@ -793,7 +939,8 @@ export function apply_changes_command(params: {
                 original_states.push({
                   file_path: file.file_path,
                   content: '',
-                  is_new: true
+                  is_new: true,
+                  workspace_name: file.workspace_name
                 })
               }
 
@@ -809,9 +956,26 @@ export function apply_changes_command(params: {
                 const promises = batch.map(async (file) => {
                   try {
                     // Check if file exists in workspace
-                    const file_exists = await vscode.workspace
-                      .findFiles(file.file_path, null, 1)
-                      .then((files) => files.length > 0)
+                    let file_exists = false
+                    if (file.workspace_name) {
+                      // Find matching workspace folder by name
+                      const matching_workspace =
+                        vscode.workspace.workspaceFolders?.find(
+                          (folder) => folder.name == file.workspace_name
+                        )
+
+                      if (matching_workspace) {
+                        const full_path = path.join(
+                          matching_workspace.uri.fsPath,
+                          file.file_path
+                        )
+                        file_exists = fs.existsSync(full_path)
+                      }
+                    } else {
+                      file_exists = await vscode.workspace
+                        .findFiles(file.file_path, null, 1)
+                        .then((files) => files.length > 0)
+                    }
 
                     // For new files, just store the information for creation later
                     if (!file_exists) {
@@ -824,13 +988,20 @@ export function apply_changes_command(params: {
                       }
                     }
 
-                    // For existing files, process them with AI
-                    const file_uri = vscode.Uri.file(
-                      path.join(
-                        vscode.workspace.workspaceFolders![0].uri.fsPath,
-                        file.file_path
-                      )
+                    // Create safe path for file operations
+                    const safe_path = create_safe_path(
+                      workspace_folder,
+                      file.file_path
                     )
+
+                    if (!safe_path) {
+                      console.error(
+                        `Path validation failed for: ${file.file_path}`
+                      )
+                      throw new Error(`Invalid file path: ${file.file_path}`)
+                    }
+
+                    const file_uri = vscode.Uri.file(safe_path)
 
                     const document = await vscode.workspace.openTextDocument(
                       file_uri
@@ -1038,6 +1209,12 @@ export function apply_changes_command(params: {
         .then((result) => {
           // Only show success message after the progress is complete and successful
           if (result === true) {
+            // Store the original states in workspace state for later reversion
+            params.context.workspaceState.update(
+              LAST_APPLIED_CHANGES_STATE_KEY,
+              original_states
+            )
+
             // If result is true, the operation completed successfully
             vscode.window
               .showInformationMessage(
@@ -1049,6 +1226,10 @@ export function apply_changes_command(params: {
               .then((response) => {
                 if (response == 'Revert') {
                   revert_files(original_states)
+                  params.context.workspaceState.update(
+                    LAST_APPLIED_CHANGES_STATE_KEY,
+                    null
+                  )
                 }
               })
           }
@@ -1193,6 +1374,18 @@ export function apply_changes_command(params: {
             await format_document(document)
             await document.save()
 
+            // Store original file state for potential reversion
+            await params.context.workspaceState.update(
+              LAST_APPLIED_CHANGES_STATE_KEY,
+              [
+                {
+                  file_path: file_path,
+                  content: original_content,
+                  is_new: false
+                }
+              ]
+            )
+
             // Show success message with Revert option
             const response = await vscode.window.showInformationMessage(
               'Changes have been applied!',
@@ -1211,6 +1404,10 @@ export function apply_changes_command(params: {
               await document.save()
               vscode.window.showInformationMessage(
                 'Changes reverted successfully.'
+              )
+              await params.context.workspaceState.update(
+                LAST_APPLIED_CHANGES_STATE_KEY,
+                null
               )
             }
           }
