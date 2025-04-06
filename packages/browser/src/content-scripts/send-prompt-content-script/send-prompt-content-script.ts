@@ -1,9 +1,24 @@
 import browser from 'webextension-polyfill'
+
+const allowedHosts = [
+  'aistudio.google.com',
+  'gemini.google.com',
+  'chatgpt.com',
+  'claude.ai',
+  'github.com',
+  'deepseek.com',
+ 'mistral.ai',
+ 'grok.com'
+];
+
+function isAllowedHost(url, host) {
+  return url.host === host;
+}
 import { Chat } from '@shared/types/websocket-message'
 import { inject_apply_changes_buttons } from './inject-apply-changes-buttons'
 
 // In case it changes before finding textarea element (e.g. in mobile AI Studio, when changing model)
-const current_url = window.location.href
+const current_url = new URL(window.location.href)
 
 // Extract batch ID from URL hash if available
 const hash = window.location.hash
@@ -15,30 +30,28 @@ const batch_id = is_gemini_coder_hash
 
 const ai_studio_url =
   'https://aistudio.google.com/prompts/new_chat#gemini-coder'
-const is_ai_studio = current_url.includes(
-  'aistudio.google.com/prompts/new_chat'
-)
+const is_ai_studio = isAllowedHost(current_url, 'aistudio.google.com')
 
 const gemini_url = 'https://gemini.google.com/app#gemini-coder'
-const is_gemini = current_url.includes('gemini.google.com/app')
+const is_gemini = isAllowedHost(current_url, 'gemini.google.com')
 
 const chatgpt_url = 'https://chatgpt.com/#gemini-coder'
-const is_chatgpt = current_url.includes('chatgpt.com/')
+const is_chatgpt = isAllowedHost(current_url, 'chatgpt.com')
 
 const claude_url = 'https://claude.ai/new#gemini-coder'
-const is_claude = current_url.includes('claude.ai/new')
+const is_claude = isAllowedHost(current_url, 'claude.ai')
 
 const github_copilot_url = 'https://github.com/copilot#gemini-coder'
-const is_github_copilot = current_url.includes('github.com/copilot')
+const is_github_copilot = isAllowedHost(current_url, 'github.com')
 
 const deepseek_url = 'https://chat.deepseek.com/#gemini-coder'
-const is_deepseek = current_url.includes('chat.deepseek.com/')
+const is_deepseek = isAllowedHost(current_url, 'deepseek.com')
 
 const mistral_url = 'https://chat.mistral.ai/chat#gemini-coder'
-const is_mistral = current_url.includes('chat.mistral.ai/chat')
+const is_mistral = isAllowedHost(current_url, 'mistral.ai')
 
 const grok_url = 'https://grok.com/#gemini-coder'
-const is_grok = current_url.includes('grok.com/')
+const is_grok = isAllowedHost(current_url, 'grok.com')
 
 // No need for special handling
 // const huggingchat_url = 'https://huggingface.co/chat/'
