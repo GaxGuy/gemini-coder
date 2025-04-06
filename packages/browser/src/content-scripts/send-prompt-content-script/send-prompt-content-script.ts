@@ -13,32 +13,52 @@ const batch_id = is_gemini_coder_hash
   ? hash.substring(hash_prefix.length + 1) || 'default'
   : ''
 
+const allowedHosts = [
+  'aistudio.google.com',
+  'gemini.google.com',
+  'chatgpt.com',
+  'claude.ai',
+  'github.com',
+  'chat.deepseek.com',
+  'chat.mistral.ai',
+  'grok.com'
+];
+
+function isAllowedHost(url) {
+  try {
+    const host = new URL(url).host;
+    return allowedHosts.includes(host);
+  } catch (e) {
+    return false;
+  }
+}
+
 const ai_studio_url =
   'https://aistudio.google.com/prompts/new_chat#gemini-coder'
-const is_ai_studio = current_url.includes(
+const is_ai_studio = isAllowedHost(current_url) && current_url.includes(
   'aistudio.google.com/prompts/new_chat'
 )
 
 const gemini_url = 'https://gemini.google.com/app#gemini-coder'
-const is_gemini = current_url.includes('gemini.google.com/app')
+const is_gemini = isAllowedHost(current_url) && current_url.includes('gemini.google.com/app')
 
 const chatgpt_url = 'https://chatgpt.com/#gemini-coder'
-const is_chatgpt = current_url.includes('chatgpt.com/')
+const is_chatgpt = isAllowedHost(current_url) && current_url.includes('chatgpt.com/')
 
 const claude_url = 'https://claude.ai/new#gemini-coder'
-const is_claude = current_url.includes('claude.ai/new')
+const is_claude = isAllowedHost(current_url) && current_url.includes('claude.ai/new')
 
 const github_copilot_url = 'https://github.com/copilot#gemini-coder'
-const is_github_copilot = current_url.includes('github.com/copilot')
+const is_github_copilot = isAllowedHost(current_url) && current_url.includes('github.com/copilot')
 
 const deepseek_url = 'https://chat.deepseek.com/#gemini-coder'
-const is_deepseek = current_url.includes('chat.deepseek.com/')
+const is_deepseek = isAllowedHost(current_url) && current_url.includes('chat.deepseek.com/')
 
 const mistral_url = 'https://chat.mistral.ai/chat#gemini-coder'
-const is_mistral = current_url.includes('chat.mistral.ai/chat')
+const is_mistral = isAllowedHost(current_url) && current_url.includes('chat.mistral.ai/chat')
 
 const grok_url = 'https://grok.com/#gemini-coder'
-const is_grok = current_url.includes('grok.com/')
+const is_grok = isAllowedHost(current_url) && current_url.includes('grok.com/')
 
 // No need for special handling
 // const huggingchat_url = 'https://huggingface.co/chat/'
