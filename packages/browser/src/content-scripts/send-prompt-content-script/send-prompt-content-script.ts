@@ -15,30 +15,28 @@ const batch_id = is_gemini_coder_hash
 
 const ai_studio_url =
   'https://aistudio.google.com/prompts/new_chat#gemini-coder'
-const is_ai_studio = current_url.includes(
-  'aistudio.google.com/prompts/new_chat'
-)
+const is_ai_studio = new URL(current_url).host === 'aistudio.google.com'
 
 const gemini_url = 'https://gemini.google.com/app#gemini-coder'
-const is_gemini = current_url.includes('gemini.google.com/app')
+const is_gemini = new URL(current_url).host === 'gemini.google.com'
 
 const chatgpt_url = 'https://chatgpt.com/#gemini-coder'
-const is_chatgpt = current_url.includes('chatgpt.com/')
+const is_chatgpt = new URL(current_url).host === 'chatgpt.com'
 
 const claude_url = 'https://claude.ai/new#gemini-coder'
-const is_claude = current_url.includes('claude.ai/new')
+const is_claude = new URL(current_url).host === 'claude.ai'
 
 const github_copilot_url = 'https://github.com/copilot#gemini-coder'
-const is_github_copilot = current_url.includes('github.com/copilot')
+const is_github_copilot = new URL(current_url).host === 'github.com'
 
 const deepseek_url = 'https://chat.deepseek.com/#gemini-coder'
-const is_deepseek = current_url.includes('chat.deepseek.com/')
+const is_deepseek = new URL(current_url).host === 'chat.deepseek.com'
 
 const mistral_url = 'https://chat.mistral.ai/chat#gemini-coder'
-const is_mistral = current_url.includes('chat.mistral.ai/chat')
+const is_mistral = new URL(current_url).host === 'chat.mistral.ai'
 
 const grok_url = 'https://grok.com/#gemini-coder'
-const is_grok = current_url.includes('grok.com/')
+const is_grok = new URL(current_url).host === 'grok.com'
 
 // No need for special handling
 // const huggingchat_url = 'https://huggingface.co/chat/'
