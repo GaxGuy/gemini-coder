@@ -10,7 +10,7 @@ const extract_filename_from_comment = (line: string): string | null => {
     .replace(/^(\/\/|#|--|\/\*|\*)\s*/, '')
     .trim()
 
-  const path_match = stripped.match(/(?:[\w\-\.\/]+\/)*[\w\-\.]+\.\w{1,10}/)
+  const path_match = stripped.match(/(?:[a-zA-Z0-9_.-]+\/)*[a-zA-Z0-9_.-]+\.\w{1,10}/)
   if (path_match && path_match[0]) {
     return path_match[0]
   }
