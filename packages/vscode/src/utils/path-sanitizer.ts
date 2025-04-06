@@ -9,7 +9,12 @@ import * as path from 'path'
  */
 export function sanitize_file_name(name: string): string {
   // Remove path traversal sequences
-  let sanitized = name.replace(/\.\.\//g, '').replace(/\.\.\\/g, '')
+  let previous;
+  let sanitized = name;
+  do {
+    previous = sanitized;
+    sanitized = sanitized.replace(/\.\.\//g, '').replace(/\.\.\\/g, '');
+  } while (sanitized !== previous);
 
   // Remove leading slashes and backslashes to prevent absolute paths
   // but preserve leading dots for hidden files
